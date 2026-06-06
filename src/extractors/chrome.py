@@ -17,6 +17,8 @@ class ChromeExtractor(ChromiumExtractor):
     )
     user_data_dirs_linux = (
         ".config/google-chrome",
+        # Flatpak (com.google.Chrome).
+        ".var/app/com.google.Chrome/config/google-chrome",
     )
 
     keychain_service = "Chrome Safe Storage"

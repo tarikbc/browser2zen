@@ -113,6 +113,46 @@ def test_firefox_extractor_skips_disabled_root(firefox_home):
     assert "Bookmarks Menu" not in folder_titles
 
 
+@pytest.mark.parametrize(
+    "root_rel",
+    [
+        "snap/firefox/common/.mozilla/firefox",                 # Ubuntu Snap
+        ".var/app/org.mozilla.firefox/.mozilla/firefox",        # Flatpak
+    ],
+)
+def test_firefox_extractor_detects_linux_packaged_install(
+    tmp_path, monkeypatch, root_rel
+):
+    """Snap/Flatpak Firefox keeps its profiles outside ``~/.mozilla``;
+    detection must find those too (regression for the Reddit report that
+    Firefox wasn't detected)."""
+    import shutil
+    import sys
+    from pathlib import Path
+
+    from extractors import FirefoxExtractor
+
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "firefox"
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    # Re-anchor the Firefox fixture tree under the packaged root instead
+    # of the macOS ``Library/Application Support/Firefox`` location.
+    for src in fixtures.rglob("*"):
+        if src.is_file():
+            dest = home / root_rel / src.relative_to(fixtures)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dest)
+
+    ext = FirefoxExtractor()
+    assert ext.is_installed() is True
+    data = ext.extract()
+    assert data.source == "firefox"
+    assert len(data.spaces) == 1
+
+
 # ----- Safari -------------------------------------------------------------
 
 def test_safari_extractor_detects_fixture(safari_home):

@@ -17,6 +17,10 @@ class BraveExtractor(ChromiumExtractor):
     )
     user_data_dirs_linux = (
         ".config/BraveSoftware/Brave-Browser",
+        # Snap (the `brave` snap keeps config under current/).
+        "snap/brave/current/.config/BraveSoftware/Brave-Browser",
+        # Flatpak (com.brave.Browser).
+        ".var/app/com.brave.Browser/config/BraveSoftware/Brave-Browser",
     )
 
     keychain_service = "Brave Safe Storage"

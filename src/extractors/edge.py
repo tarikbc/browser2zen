@@ -17,6 +17,8 @@ class EdgeExtractor(ChromiumExtractor):
     )
     user_data_dirs_linux = (
         ".config/microsoft-edge",
+        # Flatpak (com.microsoft.Edge).
+        ".var/app/com.microsoft.Edge/config/microsoft-edge",
     )
 
     keychain_service = "Microsoft Edge Safe Storage"

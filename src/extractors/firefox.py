@@ -60,13 +60,40 @@ _ROOT_IDS = {
 }
 
 
-def _firefox_profiles_root() -> Path | None:
+def _firefox_profiles_roots() -> list[Path]:
+    """Every plausible Firefox profiles root for the current OS.
+
+    On Linux the profile location depends on how Firefox was packaged:
+    a classic distro/apt install uses ``~/.mozilla/firefox``, but the
+    Snap build (the default on Ubuntu 22.04+) lives under
+    ``~/snap/firefox/common/.mozilla/firefox`` and the Flatpak build
+    under ``~/.var/app/org.mozilla.firefox/.mozilla/firefox``. We probe
+    all three so a Snap/Flatpak user isn't told Firefox is "not
+    installed".
+    """
     home = Path.home()
     if sys.platform == "darwin":
-        return home / "Library/Application Support/Firefox"
+        return [home / "Library/Application Support/Firefox"]
     if os.name == "nt":
-        return home / "AppData/Roaming/Mozilla/Firefox"
-    return home / ".mozilla/firefox"
+        return [home / "AppData/Roaming/Mozilla/Firefox"]
+    return [
+        home / ".mozilla/firefox",
+        home / "snap/firefox/common/.mozilla/firefox",
+        home / ".var/app/org.mozilla.firefox/.mozilla/firefox",
+    ]
+
+
+def _firefox_profiles_root() -> Path | None:
+    """First candidate root that has a ``profiles.ini``, else the first
+    candidate that merely exists, else the canonical-but-missing one."""
+    candidates = _firefox_profiles_roots()
+    for root in candidates:
+        if (root / "profiles.ini").is_file():
+            return root
+    for root in candidates:
+        if root.is_dir():
+            return root
+    return candidates[0] if candidates else None
 
 
 class FirefoxExtractor(BrowserExtractor):
@@ -171,6 +198,18 @@ class FirefoxExtractor(BrowserExtractor):
     def extract(self) -> ExportData:
         profiles = self.profile_paths()
         if not profiles:
+            # Distinguish "Firefox isn't here at all" from "Firefox is
+            # installed but the profile was never opened, so there's no
+            # places.sqlite yet" — the latter is a common point of
+            # confusion when the Detect screen says Firefox is present.
+            root = _firefox_profiles_root()
+            if root is not None and (root / "profiles.ini").is_file():
+                raise BrowserExtractorError(
+                    "no_firefox_profile_data",
+                    "Firefox is installed but its profile has no data yet "
+                    "(places.sqlite is missing). Launch Firefox once so it "
+                    "initialises the profile, then try again.",
+                )
             raise BrowserExtractorError(
                 "no_firefox_profiles",
                 "Firefox has no profile directory on this machine.",
