@@ -123,23 +123,25 @@ def _step_label(step: str, source_display: str) -> str:
 
 # User-facing messages mapped from the structured error codes the
 # Chromium cookie importer surfaces. Kept at module scope so the
-# orchestrator's `_run` method stays focused on flow.
+# orchestrator's `_run` method stays focused on flow. ``{source}`` is
+# filled with the active source-browser display name at emit time, so an
+# Edge/Chrome/Brave user never sees a message that says "Arc".
 _COOKIE_ERROR_MESSAGES = {
     # macOS
     "keychain_denied":
         "macOS Keychain access was denied; cookies skipped.",
     # Windows DPAPI / Chromium-family
     "chromium_local_state_missing":
-        "Arc has not been launched on this Windows account yet; cookies skipped.",
+        "{source} has not been launched on this Windows account yet; cookies skipped.",
     "chromium_no_encrypted_key":
-        "Arc has no cookie encryption key on this account; cookies skipped.",
+        "{source} has no cookie encryption key on this account; cookies skipped.",
     "chromium_appbound_encryption":
-        "Arc cookies use newer (v20) app-bound encryption; cookies skipped. "
+        "{source} cookies use newer (v20) app-bound encryption; cookies skipped. "
         "Sign in fresh on imported sites.",
     "chromium_unknown_key_prefix":
-        "Arc Local State key has an unrecognised prefix; cookies skipped.",
+        "{source} Local State key has an unrecognised prefix; cookies skipped.",
     "chromium_unexpected_key_length":
-        "Arc DPAPI key has unexpected length; cookies skipped.",
+        "{source} DPAPI key has unexpected length; cookies skipped.",
     "dpapi_wrong_user":
         "Cookies were encrypted on a different Windows account and can't be "
         "migrated. Sign in fresh on imported sites.",
@@ -520,7 +522,9 @@ class MigrationOrchestrator:
                 summary = c.import_cookies()
                 if summary.get("error"):
                     err = summary["error"]
-                    msg = _COOKIE_ERROR_MESSAGES.get(err, f"Cookie import failed: {err}")
+                    msg = _COOKIE_ERROR_MESSAGES.get(
+                        err, f"Cookie import failed: {err}"
+                    ).format(source=self.source.display_name)
                     self._error_step("cookies", RuntimeError(msg))
                 else:
                     self._done_step("cookies", summary=summary)
