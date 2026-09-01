@@ -41,6 +41,7 @@ from .base import (
     FolderRecord,
     SpaceRecord,
     TabRecord,
+    xdg_config_home,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,8 +72,11 @@ def _firefox_profiles_roots() -> list[Path]:
       ``%LOCALAPPDATA%\\Packages\\Mozilla.Firefox_<id>\\LocalCache\\Roaming\\Mozilla\\Firefox``.
       The standard path is empty for those installs, which is why both
       browser2zen and Zen's own importer otherwise miss a Store Firefox.
-    - Linux: a classic distro/apt install uses ``~/.mozilla/firefox``,
-      the Snap build (Ubuntu 22.04+ default) lives under
+    - Linux: a classic distro/apt install uses ``~/.mozilla/firefox``;
+      XDG-aware builds (Arch's ``firefox``, some others) put the
+      profiles root under ``$XDG_CONFIG_HOME/mozilla/firefox``
+      (``~/.config/mozilla/firefox`` by default); the Snap build
+      (Ubuntu 22.04+ default) lives under
       ``~/snap/firefox/common/.mozilla/firefox`` and the Flatpak build
       under ``~/.var/app/org.mozilla.firefox/.mozilla/firefox``.
 
@@ -97,6 +101,7 @@ def _firefox_profiles_roots() -> list[Path]:
         return roots
     return [
         home / ".mozilla/firefox",
+        xdg_config_home() / "mozilla/firefox",
         home / "snap/firefox/common/.mozilla/firefox",
         home / ".var/app/org.mozilla.firefox/.mozilla/firefox",
     ]

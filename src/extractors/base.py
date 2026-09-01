@@ -27,12 +27,31 @@ originated from.
 from __future__ import annotations
 
 import logging
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+
+# --------------------------------------------------------------------- paths
+
+
+def xdg_config_home() -> Path:
+    """Resolve ``$XDG_CONFIG_HOME``, defaulting to ``~/.config``.
+
+    Both Firefox and Chromium read their Linux profile root from this
+    variable, so XDG-aware builds (common on Arch) end up outside the
+    classic ``~/.config`` when the user sets it. ``app/env_check.py``
+    keeps its own copy on purpose: it is deliberately importable without
+    ``src`` on ``sys.path``.
+    """
+    env = os.environ.get("XDG_CONFIG_HOME")
+    if env:
+        return Path(env).expanduser()
+    return Path.home() / ".config"
 
 
 # --------------------------------------------------------------------- payload

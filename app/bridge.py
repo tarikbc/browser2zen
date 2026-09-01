@@ -369,7 +369,8 @@ class Bridge:
         from .env_check import list_zen_profiles
         return [
             {"name": p.name, "path": str(p.path),
-             "isRelease": p.is_release, "hasZenSessions": p.has_zen_sessions}
+             "isRelease": p.is_release, "hasZenSessions": p.has_zen_sessions,
+             "install": p.install}
             for p in list_zen_profiles()
         ]
 
