@@ -25,6 +25,20 @@ for path in (REPO_ROOT, REPO_ROOT / "src"):
         sys.path.insert(0, str(path))
 
 
+@pytest.fixture(autouse=True)
+def _clear_xdg_config_home(monkeypatch):
+    """Unset ``XDG_CONFIG_HOME`` for every test.
+
+    The Linux path lookups fall back to ``Path.home()/".config"`` only
+    when the variable is absent, and the tests redirect ``Path.home()``
+    into a tempdir. GitHub's Ubuntu runners export the variable, so
+    leaving it in place made the XDG tests pass on a developer's Mac and
+    fail in CI. Tests that exercise the variable set it themselves with
+    ``monkeypatch.setenv``, which still works on top of this.
+    """
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+
+
 # --- per-source fixture trees ---------------------------------------------
 # Each "tree" maps source-relative paths to home-relative destinations,
 # matching what the corresponding extractor's path lookups expect on real

@@ -367,8 +367,15 @@ function renderDetect(env) {
       zenSelect.style.display = "";
       clear(zenSelect);
       env.zenProfiles.forEach((p, i) => {
+        // `install` ("XDG" / "Flatpak") tells two same-named profiles
+        // apart when a native and a sandboxed Zen sit side by side.
+        // The dir name usually already carries "(release)", so only add
+        // that tag when it doesn't.
+        const tags = [];
+        if (p.isRelease && !/release/i.test(p.name)) tags.push("release");
+        if (p.install) tags.push(p.install);
         zenSelect.appendChild(el("option", {value: p.path, selected: i === 0,
-          text: p.name + (p.isRelease ? " (release)" : "")}));
+          text: p.name + (tags.length ? ` (${tags.join(", ")})` : "")}));
       });
       state.selectedZenProfile = env.zenProfiles[0].path;
       zenSelect.onchange = () => { state.selectedZenProfile = zenSelect.value; updateGate(state.env); };

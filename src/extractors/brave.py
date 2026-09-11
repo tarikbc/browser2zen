@@ -17,6 +17,14 @@ class BraveExtractor(ChromiumExtractor):
     )
     user_data_dirs_linux = (
         ".config/BraveSoftware/Brave-Browser",
+        # Brave Origin — the minimalist/debloated build shipped by the
+        # official ``brave-origin-bin`` AUR package. It keeps its own
+        # User Data dir under ``BraveSoftware/Brave-Origin[-Beta|-Nightly]``
+        # instead of ``Brave-Browser``. Snap / Flatpak variants mirror the
+        # ``Brave-Browser`` layout, so the same container paths apply.
+        ".config/BraveSoftware/Brave-Origin",
+        ".config/BraveSoftware/Brave-Origin-Beta",
+        ".config/BraveSoftware/Brave-Origin-Nightly",
         # Snap (the `brave` snap keeps config under current/).
         "snap/brave/current/.config/BraveSoftware/Brave-Browser",
         # Flatpak (com.brave.Browser).
