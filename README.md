@@ -45,6 +45,7 @@ terminal, no Python, no install steps to follow.
 
 ```bash
 brew tap tarikbc/tap
+brew trust tarikbc/tap
 brew install --cask browser2zen
 ```
 
