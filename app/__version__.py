@@ -9,4 +9,4 @@ Update this file when cutting a new tag; the matching ``v<version>``
 git tag triggers the GitHub Actions release workflow.
 """
 
-VERSION = "1.2.6"
+VERSION = "1.2.7"

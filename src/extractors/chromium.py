@@ -49,25 +49,40 @@ _NS_FOLDER = uuid.UUID("4e7b8d6a-9c33-4e2b-9fa3-1bd1d1ea2c41")
 _NS_SPACE = uuid.UUID("0ad3a9d9-95c0-4de1-87c1-2c41a9a3b1aa")
 
 
-def _root_has_profile(root: Path) -> bool:
-    """A Chromium User Data root is live if it holds a profile dir with a
-    ``Bookmarks`` file. An empty leftover install dir (e.g. an abandoned
-    ``Brave-Browser`` next to a used ``Brave-Origin``) must not shadow the
-    real one.
+def _root_profile_rank(root: Path) -> int:
+    """Rank a Chromium User Data root by how much profile data it holds.
 
-    This predicate has to stay in sync with ``is_installed`` — pick a root
-    that ``is_installed`` then rejects and the browser reports "not found"
-    anyway. In particular ``Local State`` alone is NOT enough: an install
-    that was launched once and then abandoned has one, and would shadow
-    the root the user actually uses.
+    ``2`` — a profile with a ``Bookmarks`` file. Chromium writes that only
+    once the bookmark model first saves, so it marks a root the user has
+    really used.
+
+    ``1`` — a profile with a ``History`` file. Every profile that has been
+    launched has one, including a brand-new install that has never
+    bookmarked anything. Such an install is still installed, and is still
+    worth migrating: it has history, cookies and open tabs.
+
+    ``0`` — no profile data at all. An empty leftover install dir (an
+    abandoned ``Brave-Browser`` next to a used ``Brave-Origin``) lands
+    here and must not shadow the real root. ``Local State`` alone is NOT
+    enough to rank above this: a launched-once-then-abandoned install has
+    one.
+
+    Ranks 1 and 2 both count as installed, which keeps this in sync with
+    ``profile_paths`` and ``is_installed``. The rank only decides which
+    root wins when several exist.
     """
+    best = 0
     try:
-        return any(
-            entry.is_dir() and (entry / "Bookmarks").is_file()
-            for entry in root.iterdir()
-        )
+        for entry in root.iterdir():
+            if not entry.is_dir():
+                continue
+            if (entry / "Bookmarks").is_file():
+                return 2
+            if (entry / "History").is_file():
+                best = 1
     except OSError:
-        return False
+        return 0
+    return best
 
 
 class ChromiumExtractor(BrowserExtractor):
@@ -126,20 +141,28 @@ class ChromiumExtractor(BrowserExtractor):
         else:
             paths = self._linux_user_data_paths(home)
         existing = [p for p in paths if p.is_dir()]
-        # Prefer the first root that actually holds profile data, so a
-        # leftover empty install dir can't shadow the one the user really
-        # uses. Fall back to the first existing root, then to None.
+        # Prefer the root holding the most profile data, so a leftover
+        # install dir can't shadow the one the user really uses. The first
+        # candidate wins a tie, matching the declared candidate order.
+        # Fall back to the first existing root, then to None.
+        best_root = None
+        best_rank = 0
         for root in existing:
-            if _root_has_profile(root):
-                return root
+            rank = _root_profile_rank(root)
+            if rank > best_rank:
+                best_root, best_rank = root, rank
+        if best_root is not None:
+            return best_root
         return existing[0] if existing else None
 
     def is_installed(self) -> bool:
-        root = self._user_data_dir()
-        if root is None:
-            return False
-        # Need at least one profile dir with a Bookmarks file.
-        return any((p / "Bookmarks").is_file() for p in root.iterdir() if p.is_dir())
+        # Delegate so this can never disagree with ``profile_paths``.
+        # Requiring a ``Bookmarks`` file here used to report a real Chrome
+        # install as "not installed": Chromium writes that file only after
+        # the first bookmark change, so a profile that has been browsed but
+        # never bookmarked has History, Cookies and Preferences but no
+        # Bookmarks.
+        return bool(self.profile_paths())
 
     def profile_paths(self) -> list[Path]:
         root = self._user_data_dir()
