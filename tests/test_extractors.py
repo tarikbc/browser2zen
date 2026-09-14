@@ -32,6 +32,55 @@ def test_arc_extractor_extract_shape(arc_home):
     assert urls == ["https://example.com/", "https://mozilla.org/"]
 
 
+def _strip_arc_sync_state(home):
+    """Drop ``firebaseSyncState`` from the fixture's StorableSidebar.json.
+
+    Arc only writes that blob once the profile has synced to the cloud.
+    A machine that never signed into Arc has spaces in the local sidebar
+    and no sync data at all.
+    """
+    import json
+
+    path = home / "Library/Application Support/Arc/StorableSidebar.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.pop("firebaseSyncState", None)
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+def test_arc_space_name_survives_missing_sync_state(arc_home):
+    """Space names must come from the local sidebar, not only from sync data.
+
+    Reported after an import on a machine that had never signed into Arc:
+    every space arrived named ``Space <uuid>``.
+    """
+    _strip_arc_sync_state(arc_home)
+
+    from extractors import ArcExtractor
+
+    data = ArcExtractor().extract()
+    assert len(data.spaces) == 1
+    space = data.spaces[0]
+    assert space.space_name == "Test Space"
+    assert space.icon == "\u2728"
+    urls = sorted(t.url for t in space.pinned_tabs)
+    assert urls == ["https://example.com/", "https://mozilla.org/"]
+
+
+def test_arc_space_name_prefers_local_sidebar_over_stale_sync(arc_home):
+    """A rename lands in the local sidebar first; the sync blob can lag."""
+    import json
+
+    path = arc_home / "Library/Application Support/Arc/StorableSidebar.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    models = data["firebaseSyncState"]["syncData"]["spaceModels"]
+    models[1]["value"]["title"] = "Stale Name"
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+    from extractors import ArcExtractor
+
+    assert ArcExtractor().extract().spaces[0].space_name == "Test Space"
+
+
 def test_arc_extractor_legacy_dict(arc_home):
     from extractors import ArcExtractor
 
