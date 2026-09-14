@@ -140,6 +140,54 @@ def test_chrome_cookie_db_paths(chrome_home):
     assert any(p.name == "Cookies" for p in paths)
 
 
+def test_chrome_detected_without_a_bookmarks_file(tmp_path, monkeypatch):
+    """Chromium writes ``Bookmarks`` only after the first bookmark change.
+
+    A profile that has been browsed but never bookmarked has History,
+    Cookies and Preferences and no Bookmarks. Requiring Bookmarks reported
+    a real install as "not installed" (Reddit report: "It's showing that I
+    don't have Google Chrome installed, but I do").
+    """
+    import sys
+    from pathlib import Path
+
+    from extractors import ChromeExtractor
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    profile = home / "Library/Application Support/Google/Chrome/Default"
+    profile.mkdir(parents=True)
+    (profile / "History").write_bytes(b"")
+    (profile / "Preferences").write_text("{}", encoding="utf-8")
+    assert not (profile / "Bookmarks").exists()
+
+    ext = ChromeExtractor()
+    assert ext.is_installed() is True
+    assert [p.name for p in ext.profile_paths()] == ["Default"]
+
+
+def test_chrome_not_detected_when_no_profile_data(tmp_path, monkeypatch):
+    """An install dir with no profile data still reports not installed."""
+    import sys
+    from pathlib import Path
+
+    from extractors import ChromeExtractor
+
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    root = home / "Library/Application Support/Google/Chrome"
+    root.mkdir(parents=True)
+    (root / "Local State").write_text("{}", encoding="utf-8")
+
+    assert ChromeExtractor().is_installed() is False
+
+
 def test_chromium_quit_escalates_to_force_kill(monkeypatch):
     """When a graceful quit is ignored, quit() must escalate to a forced
     kill rather than just timing out (regression: Brave wouldn't quit)."""
