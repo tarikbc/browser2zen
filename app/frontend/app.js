@@ -199,6 +199,12 @@ function wireMergeEasterEgg(zenMark, sourceRow) {
 $("tl-close").addEventListener("click", async () => {
   const api = Bridge(); if (api) api.quit_app();
 });
+$("tl-min").addEventListener("click", () => {
+  const api = Bridge(); if (api) api.minimize_app();
+});
+$("tl-max").addEventListener("click", () => {
+  const api = Bridge(); if (api) api.toggle_maximize_app();
+});
 
 // ---- welcome --------------------------------------------------------------
 

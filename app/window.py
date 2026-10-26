@@ -1,9 +1,10 @@
 """
 PyWebView window setup.
 
-Single 760×580 frameless window, vibrancy on macOS for the modern translucent
-chrome. Frontend assets are served by pywebview's built-in HTTP server so we
-avoid WKWebView's local-file restrictions.
+Single frameless window, 760×580 by default and resizable up from there,
+vibrancy on macOS for the modern translucent chrome. Frontend assets are
+served by pywebview's built-in HTTP server so we avoid WKWebView's
+local-file restrictions.
 """
 
 from __future__ import annotations
@@ -48,8 +49,10 @@ def launch(debug: bool = False) -> None:
         js_api=bridge,
         width=760,
         height=580,
+        # Keep the designed layout as the floor, but let the window grow so
+        # tall screens (the preview with many spaces) are not clipped.
         min_size=(760, 580),
-        resizable=False,
+        resizable=True,
         # macOS: frameless window with vibrancy and our custom titlebar /
         # traffic lights. Windows: keep the OS-native title bar so we get
         # snap zones, Aero shake, multi-monitor DPI handling, and the

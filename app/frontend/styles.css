@@ -1,6 +1,6 @@
 /* ====================================================================
    browser2zen GUI: single-window, multi-screen.
-   Layout: 760×580, frameless, vibrancy on macOS.
+   Layout: 760×580 and up (resizable), frameless, vibrancy on macOS.
    ==================================================================== */
 
 * { box-sizing: border-box; }

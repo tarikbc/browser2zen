@@ -129,6 +129,47 @@ class Bridge:
         except Exception:
             pass
 
+    def minimize_app(self) -> None:
+        """Minimize the window (the macOS yellow traffic-light button)."""
+        win = getattr(self, "_window", None)
+        if win is not None:
+            try:
+                win.minimize()
+            except Exception:
+                pass
+
+    # Design floor from window.py; the restore target for the green button.
+    _DEFAULT_SIZE = (760, 580)
+
+    def toggle_maximize_app(self) -> None:
+        """Grow the window to fill the screen, or shrink it back (the macOS
+        green button). pywebview's native maximize/restore does not round-trip
+        reliably on Cocoa, so drive it with explicit resizes, which do."""
+        win = getattr(self, "_window", None)
+        if win is None:
+            return
+        try:
+            if getattr(self, "_maximized", False):
+                win.resize(*self._DEFAULT_SIZE)
+                self._maximized = False
+            else:
+                win.resize(*self._screen_work_size())
+                self._maximized = True
+        except Exception:
+            pass
+
+    def _screen_work_size(self) -> tuple[int, int]:
+        """A near-fullscreen size, inset so the window keeps its rounded
+        corners and shadow. Falls back when no screen can be read."""
+        min_w, min_h = self._DEFAULT_SIZE
+        try:
+            import webview
+
+            screen = webview.screens[0]
+            return max(min_w, screen.width - 80), max(min_h, screen.height - 120)
+        except Exception:
+            return 1200, 860
+
     # ---- backup management ------------------------------------------
 
     def list_backups(self, profile_path: str | None = None) -> list:
