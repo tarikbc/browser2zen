@@ -37,6 +37,7 @@ from chromium_history_importer import HistoryImporter  # noqa: E402
 from extractors import ArcExtractor, BrowserExtractor  # noqa: E402
 from zen_bookmark_importer import ZenBookmarkImporter  # noqa: E402
 from zen_favicon_importer import FaviconImporter, _iter_pinned_urls  # noqa: E402
+from zen_password_importer import ZenPasswordImporter  # noqa: E402
 from zen_sessions_importer import ZenSessionsImporter  # noqa: E402
 from zen_space_importer import ZenProfile as _SrcZenProfile
 from zen_space_importer import ZenSpaceImporter  # noqa: E402
@@ -73,6 +74,7 @@ class PreviewReport:
     favicon_match_estimate: int    # how many URLs Arc has cached icons for
     history_rows_estimate: int
     cookies_estimate: int
+    passwords_estimate: int
 
 
 @dataclass
@@ -88,6 +90,7 @@ class MigrationOptions:
     include_open_tabs: bool = True
     include_history: bool = False
     include_cookies: bool = False
+    include_passwords: bool = False
 
 
 # ----------- step ordering used in the GUI's progress list (left to right) ---
@@ -100,6 +103,7 @@ GUI_STEPS = (
     "favicons",
     "history",
     "cookies",
+    "passwords",
     "finalize",
 )
 
@@ -113,6 +117,7 @@ STEP_LABELS = {
     "favicons":   "Importing favicons",
     "history":    "Importing browsing history",
     "cookies":    "Importing cookies",
+    "passwords":  "Importing saved passwords",
     "finalize":   "Finalizing",
 }
 
@@ -162,6 +167,64 @@ _COOKIE_ERROR_MESSAGES = {
     "cookies_db_missing":
         "Zen cookies.sqlite was not found.",
 }
+
+
+# Passwords ride Zen's own importer, so its failure modes differ from
+# cookies. ``{source}`` is filled with the active source display name.
+_PASSWORD_ERROR_MESSAGES = {
+    "no_source_passwords":
+        "{source} has no saved passwords to import.",
+    "passwords_unsupported_platform":
+        "Password import only supports macOS and Windows.",
+    "passwords_source_unsupported":
+        "Saved-password import is only available for Chromium sources "
+        "(Arc, Dia, Chrome, Edge, Brave).",
+    "zen_binary_missing":
+        "The Zen application could not be found to run its password importer.",
+    "zen_login_store_missing":
+        "Launch Zen once so it creates its password store, then click Recheck.",
+    "zen_running":
+        "Close Zen before importing passwords; Zen must own its login store "
+        "during the write.",
+    "password_import_failed":
+        "Zen's password importer did not finish; passwords skipped.",
+    "no_profiles_imported":
+        "Zen could not import passwords from any {source} profile.",
+}
+
+# Zen's per-profile errors can be long stack-ish strings; the UI shows a
+# sentence per profile, so keep each one readable.
+_PROFILE_ERROR_LIMIT = 160
+
+
+def _password_notice(summary: dict) -> str:
+    """Describe per-profile password outcomes in plain sentences.
+
+    Returns an empty string for a clean import. Profile ids are the
+    source's on-disk directory names (``Default``, ``Profile 1``).
+    """
+    profiles = summary.get("profiles") or {}
+    failed = summary.get("failed") or {}
+    missing = summary.get("missing") or []
+    total = len(profiles) + len(failed) + len(missing)
+    sentences: list[str] = []
+    if failed or missing:
+        if profiles:
+            sentences.append(
+                f"Imported {summary.get('imported', 0)} passwords from "
+                f"{len(profiles)} of {total} profiles."
+            )
+        for pid, err in failed.items():
+            err = err if len(err) <= _PROFILE_ERROR_LIMIT else err[:_PROFILE_ERROR_LIMIT] + "..."
+            sentences.append(f"{pid} failed ({err}).")
+        if missing:
+            sentences.append(f"Zen's importer did not find {', '.join(missing)}.")
+    elif summary.get("warning") == "no_passwords_imported":
+        sentences.append(
+            "No passwords were imported. Zen skips logins it already has, "
+            "and nothing imports if the Keychain prompt is denied."
+        )
+    return " ".join(sentences)
 
 
 # ------------------------------------------------------------------ orchestrator
@@ -234,6 +297,7 @@ class MigrationOrchestrator:
         favicon_match_estimate = self._estimate_favicons(all_urls)
         history_rows_estimate = self._estimate_history_rows()
         cookies_estimate = self._estimate_cookies()
+        passwords_estimate = self._estimate_passwords()
 
         return PreviewReport(
             spaces=space_summaries,
@@ -244,6 +308,7 @@ class MigrationOrchestrator:
             favicon_match_estimate=favicon_match_estimate,
             history_rows_estimate=history_rows_estimate,
             cookies_estimate=cookies_estimate,
+            passwords_estimate=passwords_estimate,
         )
 
     def _estimate_favicons(self, urls: list[str]) -> int:
@@ -290,6 +355,24 @@ class MigrationOrchestrator:
                 try:
                     conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2.0)
                     n = conn.execute("SELECT COUNT(*) FROM cookies").fetchone()[0]
+                    conn.close()
+                    total += int(n or 0)
+                except Exception:
+                    continue
+            return total
+        except Exception:
+            return 0
+
+    def _estimate_passwords(self) -> int:
+        try:
+            import sqlite3
+            total = 0
+            for db in self.source.login_data_paths():
+                try:
+                    conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2.0)
+                    n = conn.execute(
+                        "SELECT COUNT(*) FROM logins WHERE blacklisted_by_user = 0"
+                    ).fetchone()[0]
                     conn.close()
                     total += int(n or 0)
                 except Exception:
@@ -535,7 +618,12 @@ class MigrationOrchestrator:
                 self._error_step("cookies", exc)
             yield from self._drain_yield()
 
-        # 9: finalize ----------------------------------------------------
+        # 9: passwords ---------------------------------------------------
+        if opts.include_passwords:
+            self._run_passwords_step(zen_profile)
+            yield from self._drain_yield()
+
+        # 10: finalize ---------------------------------------------------
         self._start_step("finalize")
         try:
             (zen_profile / ".browser2zen-migrated").write_text(
@@ -545,6 +633,54 @@ class MigrationOrchestrator:
             pass
         self._done_step("finalize", message="Migration complete")
         yield from self._drain_yield()
+
+    def _run_passwords_step(self, zen_profile: Path) -> None:
+        self._start_step("passwords")
+        try:
+            summary = self._import_passwords(zen_profile)
+        except Exception as exc:
+            self._error_step("passwords", exc)
+            return
+        err = summary.get("error")
+        notice = _password_notice(summary)
+        if err in ("no_source_passwords", "passwords_source_unsupported"):
+            # Nothing to import is a clean skip, not a migration failure.
+            msg = _PASSWORD_ERROR_MESSAGES[err].format(source=self.source.display_name)
+            self._done_step("passwords", summary={"imported": 0, "skipped": msg})
+        elif err:
+            msg = _PASSWORD_ERROR_MESSAGES.get(
+                err, f"Password import failed: {err}"
+            ).format(source=self.source.display_name)
+            self._error_step("passwords", RuntimeError(f"{msg} {notice}".strip()))
+        else:
+            if notice:
+                summary = {**summary, "notice": notice}
+                self._emit({"kind": "warn", "step": "passwords", "message": notice})
+            self._done_step("passwords", summary=summary)
+
+    def _import_passwords(self, zen_profile: Path) -> dict:
+        user_data = self.source.user_data_root()
+        login_dbs = self.source.login_data_paths()
+        if user_data is None or not login_dbs:
+            # Firefox/Safari have no Chromium login store Zen can read.
+            code = ("no_source_passwords" if user_data is not None
+                    else "passwords_source_unsupported")
+            return {"error": code}
+
+        from app.env_check import zen_binary_path
+        zen_binary = zen_binary_path()
+        if zen_binary is None:
+            return {"error": "zen_binary_missing"}
+
+        importer = ZenPasswordImporter(
+            zen_profile=zen_profile,
+            zen_binary=zen_binary,
+            source_user_data=user_data,
+            profile_ids=[db.parent.name for db in login_dbs],
+            keychain_service=getattr(self.source, "keychain_service", "Arc Safe Storage"),
+            keychain_account=getattr(self.source, "keychain_account", "Arc"),
+        )
+        return importer.import_passwords()
 
     def _drain_yield(self) -> Iterator[ProgressEvent]:
         yield from self.bus.drain()
@@ -585,4 +721,5 @@ def preview_to_dict(report: PreviewReport) -> dict:
         "faviconMatchEstimate": report.favicon_match_estimate,
         "historyRowsEstimate": report.history_rows_estimate,
         "cookiesEstimate": report.cookies_estimate,
+        "passwordsEstimate": report.passwords_estimate,
     }

@@ -67,12 +67,14 @@ const state = {
     includeOpenTabs: true,
     includeHistory: false,
     includeCookies: false,
+    includePasswords: false,
     excludedSpaces: [],
   },
   steps: [],
   stepLabels: {},
   stepStates: {},
   stepSummaries: {},
+  stepErrors: {},
   logLines: [],
   pollHandle: null,
   startedAt: 0,
@@ -484,6 +486,10 @@ function renderPreview(p) {
                                  `Copy ~${formatRows(p.historyRowsEstimate)} history rows`));
   toggles.appendChild(makeToggle("includeCookies", "Cookies & login state",
                                  `Copy ~${formatRows(p.cookiesEstimate)} cookies (Keychain prompt)`));
+  if (p.passwordsEstimate > 0) {
+    toggles.appendChild(makeToggle("includePasswords", "Saved passwords",
+                                   `Import ~${formatRows(p.passwordsEstimate)} logins (Zen opens briefly, Keychain prompt)`));
+  }
   toggles.appendChild(makeToggle("foldersCollapsed", "Collapse folders",
                                  "Imported folders start collapsed"));
 }
@@ -626,6 +632,11 @@ const STEP_ICON_BUILDERS = {
     svgChild(s, "path", {d: "M14 9 L14 12", "stroke-linecap": "round"});
     svgChild(s, "path", {d: "M16 9 L16 11.5", "stroke-linecap": "round"});
   },
+  passwords: (s) => {
+    svgChild(s, "circle", {cx: 6, cy: 9, r: 3.5});
+    svgChild(s, "path", {d: "M9 9 L16 9 L16 12", "stroke-linecap": "round"});
+    svgChild(s, "path", {d: "M13 9 L13 11.5", "stroke-linecap": "round"});
+  },
   finalize: (s) => svgChild(s, "path", {d: "M3 9 L7.5 13 L15 5",
                                          "stroke-width": 2, "stroke-linecap": "round", "stroke-linejoin": "round"}),
 };
@@ -669,6 +680,8 @@ function stepSubtitle(step) {
       return "Copying browsing history into places.sqlite";
     case "cookies":
       return `Decrypting ${src} cookies and writing to cookies.sqlite`;
+    case "passwords":
+      return `Opening Zen to import ${src} saved passwords`;
     case "finalize":
       return "Marking migration complete";
     default:
@@ -739,6 +752,7 @@ async function goToProgress() {
   state.stepLabels = meta.labels;
   state.stepStates = Object.fromEntries(state.steps.map(s => [s, "pending"]));
   state.stepSummaries = {};
+  state.stepErrors = {};
   state.logLines = [];
   state.activeStep = null;
   state.activeDetail = "";
@@ -784,7 +798,9 @@ function handleEvent(ev) {
     state.activeDetail = "";
     state.activeProgress = null;
   } else if (ev.kind === "step_done") {
-    state.stepStates[ev.step] = "done";
+    // A step that finished with a warning (e.g. some password profiles
+    // failed) stays visibly distinct from a clean success.
+    state.stepStates[ev.step] = (ev.summary && ev.summary.warning) ? "warn" : "done";
     if (ev.summary) state.stepSummaries[ev.step] = ev.summary;
     if (state.activeStep === ev.step) {
       state.activeStep = null;
@@ -793,6 +809,7 @@ function handleEvent(ev) {
     }
   } else if (ev.kind === "step_error") {
     state.stepStates[ev.step] = "error";
+    state.stepErrors[ev.step] = ev.detail || ev.message || "";
   } else {
     state.logLines.push({kind: ev.kind, message: ev.message, step: ev.step});
     if (state.logLines.length > 500) state.logLines.shift();
@@ -812,6 +829,7 @@ function visibleSteps() {
   return state.steps.filter(s => {
     if (s === "history")   return state.options.includeHistory;
     if (s === "cookies")   return state.options.includeCookies;
+    if (s === "passwords") return state.options.includePasswords;
     if (s === "containers" || s === "sessions") return state.options.includeWorkspaces || state.options.includePinnedTabs;
     if (s === "bookmarks") return state.options.includeBookmarks;
     if (s === "favicons")  return state.options.includeFavicons;
@@ -833,7 +851,7 @@ function renderProgress() {
   const total = steps.length;
   const meta = $("progress-meta");
   if (activeIdx >= 0)                                          meta.textContent = `Step ${activeIdx + 1} of ${total}`;
-  else if (steps.every(s => state.stepStates[s] === "done"))   meta.textContent = `${total} of ${total} done`;
+  else if (steps.every(s => ["done", "warn"].includes(state.stepStates[s]))) meta.textContent = `${total} of ${total} done`;
   else                                                         meta.textContent = "Working";
 
   // unified timeline
@@ -849,7 +867,7 @@ function renderProgress() {
 }
 
 function makeRow(step, st) {
-  const summary = (st === "done") ? stepSummaryText(step, state.stepSummaries[step]) : "";
+  const summary = (st === "done" || st === "warn") ? stepSummaryText(step, state.stepSummaries[step]) : "";
   return el("li", {class: "tl-step", dataset: {step, state: st}}, [
     el("div", {class: "ico"}, [makeStepIcon(step)]),
     el("span", {class: "lbl", text: state.stepLabels[step] || step}),
@@ -883,6 +901,13 @@ function stepSummaryText(step, s) {
   }
   if (step === "history") return `${formatRows(s.places_added ?? 0)} places · ${formatRows(s.visits_added ?? 0)} visits`;
   if (step === "cookies") return `${formatRows(s.imported ?? 0)} imported · ${formatRows(s.merged ?? 0)} merged`;
+  if (step === "passwords") {
+    if (s.skipped) return "skipped";
+    const imported = `${formatRows(s.imported ?? 0)} passwords imported`;
+    const bad = Object.keys(s.failed || {}).length + (s.missing || []).length;
+    if (bad) return `${imported}, ${bad} ${bad === 1 ? "profile" : "profiles"} not imported`;
+    return imported;
+  }
   if (step === "sessions") {
     if (s.pinned == null && s.open == null) return s.ok ? "ok" : "";
     const parts = [];
@@ -936,7 +961,9 @@ async function finishOk(finalState) {
     summary.title = "";
     summary.onclick = null;
   } else {
-    headline.textContent = "All set.";
+    const problems = renderDoneNotes();
+    headline.textContent = problems ? "Finished with problems." : "All set.";
+    $("screen-done").dataset.outcome = problems ? "warn" : "ok";
     const ext = state.stepSummaries.extract || {};
     summary.textContent = ext.pinned
       ? `${ext.pinned} pinned tabs across ${ext.spaces} spaces. Backups saved next to your Zen profile.`
@@ -946,6 +973,10 @@ async function finishOk(finalState) {
     summary.onclick = null;
   }
 
+  if (isBackup) {
+    $("screen-done").dataset.outcome = "ok";
+    $("done-notes").style.display = "none";
+  }
   launch.style.display = isBackup ? "none" : "";
   backupsSection.style.display = isBackup ? "none" : "";
   $("done-back").style.display = isBackup ? "" : "none";
@@ -961,6 +992,22 @@ async function finishOk(finalState) {
       }));
     }
   }
+}
+
+// Lists warnings and failed steps on the Done screen so a partial
+// migration never reads as a clean one. Returns how many it listed.
+function renderDoneNotes() {
+  const list = $("done-notes"); clear(list);
+  for (const s of visibleSteps()) {
+    const label = state.stepLabels[s] || s;
+    let text = "";
+    // step_error details come from format_exception_only; drop the class name.
+    if (state.stepStates[s] === "error") text = `${label} failed. ${(state.stepErrors[s] || "").replace(/^\w+: /, "")}`;
+    else if (state.stepStates[s] === "warn") text = (state.stepSummaries[s] || {}).notice || `${label} finished with warnings.`;
+    if (text) list.appendChild(el("li", {dataset: {step: s}, text: text.trim()}));
+  }
+  list.style.display = list.children.length ? "" : "none";
+  return list.children.length;
 }
 
 $("done-launch").addEventListener("click", async () => {
@@ -1121,6 +1168,7 @@ function currentOptionsJson() {
     includeOpenTabs: state.options.includeOpenTabs,
     includeHistory: state.options.includeHistory,
     includeCookies: state.options.includeCookies,
+    includePasswords: state.options.includePasswords,
   });
 }
 
@@ -1524,6 +1572,7 @@ function startProgressPolling() {
   setScreen("progress");
   state.stepStates = {};
   state.stepSummaries = {};
+  state.stepErrors = {};
   state.logLines = [];
   state.activeStep = null;
   state.activeDetail = "";

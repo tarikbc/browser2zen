@@ -84,7 +84,16 @@ window.pywebview = {
     get_step_metadata:       async () => ({ steps: [], labels: {} }),
     // Migration-side methods: tests don't drive these screens via the
     // happy path, but app.js may call them on screen entry.
-    preview:                 async () => ({ ok: true, spaces: [], folders: [], pinnedTabs: 0 }),
+    preview:                 async () => ({
+      spaces: [
+        { name: "Work",    icon: "💼", pinnedCount: 8, openCount: 2, folderCount: 1, essentialCount: 2, color: [94, 134, 255] },
+        { name: "Reading", icon: "📚", pinnedCount: 5, openCount: 1, folderCount: 0, essentialCount: 1, color: [120, 90, 220] },
+        { name: "Hobby",   icon: "🎧", pinnedCount: 4, openCount: 1, folderCount: 1, essentialCount: 2, color: [40, 170, 120] },
+      ],
+      pinnedTotal: 17, openTotal: 4, folderTotal: 2, bookmarkTotal: 19,
+      faviconMatchEstimate: 15, historyRowsEstimate: 42000,
+      cookiesEstimate: 12000, passwordsEstimate: 320,
+    }),
     start_migration:         async () => ({ ok: true }),
     start_zen_export:        async () => ({ ok: true }),
     start_zen_restore:       async () => ({ ok: true }),

@@ -176,6 +176,16 @@ class ArcExtractor(BrowserExtractor):
                     break
         return out
 
+    def login_data_paths(self) -> list[Path]:
+        root = self._user_data_dir()
+        if root is None:
+            return []
+        return [profile / "Login Data" for profile in sorted(root.iterdir())
+                if profile.is_dir() and (profile / "Login Data").is_file()]
+
+    def user_data_root(self) -> Path | None:
+        return self._user_data_dir()
+
     def local_state_paths(self) -> list[Path]:
         # Used on Windows for DPAPI key unwrap.
         home = Path.home()

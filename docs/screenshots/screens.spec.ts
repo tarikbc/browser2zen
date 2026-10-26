@@ -78,6 +78,19 @@ test("detect", async ({ page }) => {
   await shoot(page, "detect");
 });
 
+test("preview", async ({ page }) => {
+  await bootHarness(page);
+  await page.locator("#welcome-go").click();
+  await waitForActiveScreen(page, "source");
+  await page.locator('.source-card[data-name="arc"]').click();
+  await page.locator("#source-next").click();
+  await waitForActiveScreen(page, "detect");
+  await page.locator("#detect-next").click();
+  await waitForActiveScreen(page, "preview");
+  await page.locator("#toggles .toggle").last().waitFor({ state: "visible" });
+  await shoot(page, "preview");
+});
+
 test("backup-mode", async ({ page }) => {
   await bootHarness(page);
   await page.locator("#welcome-backup").click();

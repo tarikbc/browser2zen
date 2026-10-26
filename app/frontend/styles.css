@@ -661,6 +661,7 @@ body[data-platform="mac"] main {
   box-shadow: 0 0 12px rgba(94, 134, 255, 0.32);
 }
 .meter-segment[data-state="error"]  { background: var(--error); }
+.meter-segment[data-state="warn"]   { background: var(--warn); }
 
 /* Timeline: one unified vertical list. Active row expands inline. */
 .timeline {
@@ -730,6 +731,10 @@ body[data-platform="mac"] main {
   margin-right: 6px;
   flex: 0 0 auto;
 }
+
+/* state: warn (finished, but part of the step did not land) */
+.tl-step[data-state="warn"] .ico     { color: var(--warn); }
+.tl-step[data-state="warn"] .summary { color: var(--warn); }
 
 /* state: error */
 .tl-step[data-state="error"] .ico { color: var(--error); }
@@ -861,12 +866,26 @@ body[data-platform="mac"] main {
   animation: drawcheck 600ms 100ms cubic-bezier(0.2, 0, 0, 1) forwards;
 }
 @keyframes drawcheck { to { stroke-dashoffset: 0; } }
+#screen-done[data-outcome="warn"] .check          { background: var(--warn-soft); }
+#screen-done[data-outcome="warn"] .check svg path { stroke: var(--warn); }
 #screen-done .summary {
   margin-top: var(--space-2);
   font-size: var(--fs-body);
   color: var(--text-secondary);
   max-width: 480px;
 }
+#screen-done .notes {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  max-width: 540px;
+  text-align: left;
+  font-size: var(--fs-small);
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-radius: var(--radius-sm);
+}
+#screen-done .notes li + li { margin-top: var(--space-2); }
 #screen-done .actions { margin-top: var(--space-6); display: flex; gap: var(--space-3); }
 #screen-done .backups {
   margin-top: var(--space-6);

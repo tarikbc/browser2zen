@@ -134,6 +134,7 @@ your profile, then click **Recheck** in browser2zen and continue.
 | **Favicons** | The source's cached icons are inlined so tabs show their icons immediately, with no waiting for refetch. |
 | **History** | Optional. Browsing history with original timestamps is copied over. |
 | **Login state** | Optional. Chromium-format cookies are decrypted (via macOS Keychain or Windows DPAPI, depending on platform) and re-encrypted into Zen so you stay logged in to Gmail, Twitter, and the rest. |
+| **Saved passwords** | Optional, Chromium sources only. Zen opens for a few seconds and imports your saved logins through its own importer, so each password is re-encrypted with Zen's key. macOS asks once to let Zen read the source's Keychain entry. |
 
 Every step writes a timestamped backup beside your Zen profile before
 it changes anything, and source-browser data is read-only. The Backups screen

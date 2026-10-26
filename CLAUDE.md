@@ -35,8 +35,18 @@ BrowserExtractor.extract() → ExportData → to_legacy_dict()
               ├─── ZenBookmarkImporter   → places.sqlite (moz_bookmarks)
               ├─── FaviconImporter       → favicons.sqlite + inline data URIs
               ├─── HistoryImporter       → places.sqlite (moz_places, moz_historyvisits)
-              └─── CookiesImporter       → cookies.sqlite (incl. per-container dupes)
+              ├─── CookiesImporter       → cookies.sqlite (incl. per-container dupes)
+              └─── ZenPasswordImporter   → logins.json + key4.db (via Zen's own importer)
 ```
+
+The password step is the one writer that does not hand-write a Zen file.
+Zen encrypts logins with its NSS key, so `ZenPasswordImporter` briefly
+launches Zen headless with Marionette and drives Zen's built-in
+`ChromeProfileMigrator`, restricted to passwords, against the Chromium
+source's `User Data`. No password plaintext passes through browser2zen,
+and nothing reverse-engineers Zen's credential crypto. It runs only for
+Chromium sources and refuses while Zen is open, since Zen must own the
+login store during the write.
 
 ### Source extractors (`src/extractors/`)
 

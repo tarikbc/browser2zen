@@ -266,6 +266,41 @@ def is_zen_running() -> bool:
     return False
 
 
+# ---------- zen binary ----------
+
+
+def zen_binary_path() -> Path | None:
+    """The Zen executable this machine would launch, or ``None``.
+
+    The password step drives Zen's own importer, so it needs the binary
+    rather than the profile. Mirrors the running-process path lists so the
+    two can never disagree about where Zen lives.
+    """
+    if sys.platform == "darwin":
+        for p in _ZEN_PROCESS_PATHS:
+            if Path(p).is_file():
+                return Path(p)
+        return None
+    if os.name == "nt":
+        home = Path.home()
+        candidates: list[Path] = []
+        for prof in list_zen_profiles():
+            root = prof.path.parent.parent
+            candidates += [root / "zen.exe", root / "zen-bin.exe"]
+        candidates += [
+            home / "AppData/Local/zen/zen.exe",
+            Path("C:/Program Files/Zen Browser/zen.exe"),
+            Path("C:/Program Files (x86)/Zen Browser/zen.exe"),
+        ]
+        return next((c for c in candidates if c.is_file()), None)
+    for rel in ("zen/zen", "zen-bin"):
+        cand = Path("/usr/lib") / rel
+        if cand.is_file():
+            return cand
+    found = shutil.which("zen")
+    return Path(found) if found else None
+
+
 # ---------- previous migration marker ----------
 
 

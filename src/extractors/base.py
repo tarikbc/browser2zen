@@ -315,6 +315,17 @@ class BrowserExtractor(ABC):
         on Windows). Empty for Firefox/Safari and unused on macOS."""
         return []
 
+    def login_data_paths(self) -> list[Path]:
+        """Chromium ``Login Data`` SQLite files, one per source profile.
+        Empty for sources whose passwords Zen cannot import directly."""
+        return []
+
+    def user_data_root(self) -> Path | None:
+        """The Chromium ``User Data`` root that holds the profile folders.
+        ``None`` for non-Chromium sources. Zen's own password importer reads
+        saved logins from here per profile."""
+        return None
+
     # ---- cookie decryption ----
 
     def cookie_master_key(self) -> bytes:

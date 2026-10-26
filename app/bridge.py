@@ -627,4 +627,5 @@ class Bridge:
             include_open_tabs=bool(data.get("includeOpenTabs", False)),
             include_history=bool(data.get("includeHistory", False)),
             include_cookies=bool(data.get("includeCookies", False)),
+            include_passwords=bool(data.get("includePasswords", False)),
         )

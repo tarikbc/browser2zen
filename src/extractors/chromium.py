@@ -307,6 +307,17 @@ class ChromiumExtractor(BrowserExtractor):
             return []
         return [root / "Local State"] if (root / "Local State").is_file() else []
 
+    def login_data_paths(self) -> list[Path]:
+        out: list[Path] = []
+        for prof in self.profile_paths():
+            cand = prof / "Login Data"
+            if cand.is_file():
+                out.append(cand)
+        return out
+
+    def user_data_root(self) -> Path | None:
+        return self._user_data_dir()
+
     # ---------- cookie key ----------
 
     def cookie_master_key(self) -> bytes:
